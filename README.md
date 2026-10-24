@@ -128,3 +128,7 @@ ATTRIBUTION.md         licenses for the benchmark datasets
 ## Use of AI
 
 I used Claude Code to generate test cases and to help write and refactor parts of the code.
+
+
+
+This code accompanies the paper "Beyond Runtime Guardrails: A Pre-Execution Agent Qualification Framework for Task-Criticality-Aware AI Deployment", accepted at the Who-verifies Agents? workshop at NeurIPS 2026.
