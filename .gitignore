@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.system_generated/
+
+# Benchmark-derived data: fetched/normalized locally via
+# `python -m peaq.data.combine`, never committed (see ATTRIBUTION.md).
+data/raw/
+data/processed/
+
+# runner.py output -- regenerate via `python runner.py`.
+peaq_phase_d_full_run.txt
+.idea/

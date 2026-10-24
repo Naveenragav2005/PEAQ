@@ -1,0 +1,5 @@
+ollama
+httpx
+python-dotenv
+starlette
+uvicorn

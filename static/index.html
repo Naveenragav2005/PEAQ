@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PEAQ — Agent Safety Gate Dashboard</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <!-- Chart.js and Lucide Icons CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo-box">
+                    <span class="logo-text">PEAQ</span>
+                    <span class="logo-dot"></span>
+                </div>
+                <p class="brand-tagline">Pre-Execution Agent Qualification</p>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="simulator">
+                    <i data-lucide="shield-check"></i>
+                    <span>Gate Simulator</span>
+                </button>
+                <button class="nav-item" data-tab="benchmarks">
+                    <i data-lucide="bar-chart-3"></i>
+                    <span>Benchmarks</span>
+                </button>
+                <button class="nav-item" data-tab="config">
+                    <i data-lucide="settings-2"></i>
+                    <span>Parameters & Rules</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator-box">
+                    <span class="status-pulse green"></span>
+                    <span class="status-label" id="dataset-status-label">Gate Engine Online</span>
+                </div>
+                <div class="gemini-toggle-box">
+                    <label class="switch">
+                        <input type="checkbox" id="llm-classifier-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">Ollama Classifier Active</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+
+            <!-- HEADER -->
+            <header class="content-header">
+                <div class="header-left">
+                    <h1 id="page-title">Gate Simulator</h1>
+                    <p class="header-subtitle" id="page-subtitle">Evaluate agent planner authorization thresholds in real-time</p>
+                </div>
+                <div class="header-right">
+                    <div class="domain-selector-wrapper">
+                        <label for="global-domain-select">Domain:</label>
+                        <select id="global-domain-select" class="custom-select"></select>
+                    </div>
+                </div>
+            </header>
+
+            <!-- TAB 1: SIMULATOR -->
+            <section id="tab-simulator" class="tab-pane active">
+                <div class="grid-layout">
+
+                    <!-- Left: Control Panel -->
+                    <div class="card panel-controls">
+                        <div class="card-header">
+                            <i data-lucide="sliders"></i>
+                            <h2>Simulation Setup</h2>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sim-agent-select">Target Agent Profile</label>
+                            <select id="sim-agent-select" class="custom-select"></select>
+                            <div id="selected-agent-preview" class="agent-compact-preview"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="label-with-action">
+                                <label for="sim-test-select">Select Real Benchmark Case</label>
+                                <button id="load-custom-btn" class="text-btn">Or Write Custom</button>
+                            </div>
+                            <select id="sim-test-select" class="custom-select">
+                                <option value="">-- Choose a real test case --</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="custom-request-group" style="display:none;">
+                            <label for="sim-custom-text">Custom User Request</label>
+                            <textarea id="sim-custom-text" class="custom-textarea" placeholder="e.g., Please refund $150 to the customer immediately."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sim-config-select">Safety Configuration</label>
+                            <select id="sim-config-select" class="custom-select">
+                                <option value="none">No Safety Gate (Direct Execution)</option>
+                                <option value="post_hoc">Post-hoc Verification Check Only</option>
+                                <option value="runtime_auth">Runtime Tool Authorization Only</option>
+                                <option value="peaq_runtime" selected>PEAQ Gate (Full Algorithm 1)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Runtime Context Parameters</label>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="ctx-human-approved">
+                                    <span class="checkmark"></span>
+                                    Human Approved
+                                </label>
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="ctx-authorized">
+                                    <span class="checkmark"></span>
+                                    Runtime Authorized
+                                </label>
+                            </div>
+                            <label for="ctx-json-override" class="context-json-label">
+                                Additional context overrides (JSON) &mdash; e.g. kyc_verified, destination_account_verified,
+                                recipient_verified, requester_identity_verified, content_policy_clear,
+                                target_directory_sandboxed, amount, order_id
+                            </label>
+                            <textarea id="ctx-json-override" class="custom-textarea json-editor" placeholder="{}"></textarea>
+                        </div>
+
+                        <button id="run-simulation-btn" class="primary-btn">
+                            <i data-lucide="play"></i>
+                            <span>Evaluate Safety Gate</span>
+                        </button>
+                    </div>
+
+                    <!-- Right: Visualizer -->
+                    <div class="visualizer-container">
+
+                        <!-- Visual Step Tracer -->
+                        <div class="card trace-card">
+                            <div class="card-header">
+                                <i data-lucide="git-commit"></i>
+                                <h2>Decision Flow Tracer</h2>
+                                <span class="badge" id="trace-config-badge">PEAQ Gate</span>
+                            </div>
+
+                            <div class="tracer-flow">
+                                <!-- Step 1: Input Classify -->
+                                <div class="flow-step" id="step-classify">
+                                    <div class="step-icon-box"><i data-lucide="sparkles"></i></div>
+                                    <div class="step-content">
+                                        <h3>1. Request Classification</h3>
+                                        <p class="step-desc">Identifying action target & criticality level...</p>
+                                        <div class="step-output" id="out-classify">Awaiting trigger...</div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 2: Agent Profile Evaluation -->
+                                <div class="flow-step" id="step-eval">
+                                    <div class="step-icon-box"><i data-lucide="award"></i></div>
+                                    <div class="step-content">
+                                        <h3>2. Qualification & Trust Math</h3>
+                                        <p class="step-desc">Computing weighted Trust Score vs Threshold theta_kappa...</p>
+                                        <div class="step-output" id="out-eval">Awaiting trigger...</div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 3: Hard Constraints -->
+                                <div class="flow-step" id="step-constraints">
+                                    <div class="step-icon-box"><i data-lucide="lock"></i></div>
+                                    <div class="step-content">
+                                        <h3>3. Pre-plan Hard Constraints (H1-H4)</h3>
+                                        <p class="step-desc">Checking safety rules that override scores...</p>
+                                        <div class="step-output" id="out-constraints">Awaiting trigger...</div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 4: Final Verdict -->
+                                <div class="flow-step" id="step-decision">
+                                    <div class="step-icon-box"><i data-lucide="shield-alert"></i></div>
+                                    <div class="step-content">
+                                        <h3>4. Security Gate Decision</h3>
+                                        <p class="step-desc">Routing planning capability based on verdict...</p>
+                                        <div class="decision-hero" id="hero-decision">
+                                            <div class="decision-text">NO DECISION</div>
+                                            <div class="decision-reason">Run simulation to see safety gate verdict.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Execution logs console -->
+                        <div class="card console-card">
+                            <div class="card-header">
+                                <i data-lucide="terminal"></i>
+                                <h2>Runtime Decision Log</h2>
+                                <button id="clear-console-btn" class="icon-btn"><i data-lucide="trash-2"></i></button>
+                            </div>
+                            <div class="console-body" id="console-output">
+                                <span class="console-placeholder">Waiting for simulation execution trace...</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: BENCHMARKS -->
+            <section id="tab-benchmarks" class="tab-pane">
+
+                <!-- Dataset overview strip -->
+                <div class="stats-grid" id="dataset-stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon indigo"><i data-lucide="database"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="stat-total-cases">&mdash;</span>
+                            <span class="stat-lbl">Real benchmark cases (5 sources)</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue"><i data-lucide="layers"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="stat-domains">&mdash;</span>
+                            <span class="stat-lbl">Capability-surface domains</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="stat-test-split">&mdash;</span>
+                            <span class="stat-lbl">Held-out test cases</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bench-control-bar card">
+                    <div class="bench-inputs">
+                        <div class="form-group-row">
+                            <label for="bench-agent-select">Benchmark Agent:</label>
+                            <select id="bench-agent-select" class="custom-select select-inline"></select>
+                        </div>
+                        <div class="form-group-row">
+                            <label for="bench-domain-select">Domain:</label>
+                            <select id="bench-domain-select" class="custom-select select-inline">
+                                <option value="all">All Domains</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="bench-actions">
+                        <button id="run-benchmarks-btn" class="primary-btn">
+                            <i data-lucide="zap"></i>
+                            <span>Run 4-Way Configuration Benchmark</span>
+                        </button>
+                        <button id="run-ablation-btn" class="primary-btn secondary-btn">
+                            <i data-lucide="layers-3"></i>
+                            <span>Run Hard-Constraint / Trust-Score Ablation</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Benchmarks Results Dashboard -->
+                <div class="benchmarks-dashboard" id="benchmarks-dashboard-content" style="display: none;">
+
+                    <!-- Stats Grid -->
+                    <div class="stats-grid">
+                        <div class="stat-card" id="stat-violations">
+                            <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-val">0</span>
+                                <span class="stat-lbl">Policy Violations prevented by PEAQ</span>
+                            </div>
+                        </div>
+                        <div class="stat-card" id="stat-bypasses">
+                            <div class="stat-icon orange"><i data-lucide="flame"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-val">0</span>
+                                <span class="stat-lbl">Adversarial Bypasses prevented</span>
+                            </div>
+                        </div>
+                        <div class="stat-card" id="stat-efficiency">
+                            <div class="stat-icon green"><i data-lucide="timer"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-val">0%</span>
+                                <span class="stat-lbl">Latency saved vs Runtime Auth Only</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts row -->
+                    <div class="charts-row">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <i data-lucide="target"></i>
+                                <h2>Catch Rate vs False-Rejection Rate</h2>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="chart-safety"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <i data-lucide="clock"></i>
+                                <h2>Average Total Latency (Lower is Better)</h2>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="chart-latency"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metric Comparison Table -->
+                    <div class="card table-card">
+                        <div class="card-header">
+                            <i data-lucide="table"></i>
+                            <h2>Safety Configuration Comparison Matrix</h2>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="comparison-table" id="bench-comparison-table">
+                                <thead>
+                                    <tr>
+                                        <th>Safety Gate Configuration</th>
+                                        <th>Catch Rate</th>
+                                        <th>False-Rejection Rate</th>
+                                        <th>Policy Violations</th>
+                                        <th>Adversarial Bypasses</th>
+                                        <th>Avg Latency (s)</th>
+                                    </tr>
+                                </thead>
+                                <tbody><!-- Rendered dynamically --></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Ablation results -->
+                    <div class="card table-card" id="ablation-card" style="display:none;">
+                        <div class="card-header">
+                            <i data-lucide="layers-3"></i>
+                            <h2>Hard-Constraint vs Trust-Score Ablation (PEAQ config only)</h2>
+                        </div>
+                        <p class="section-desc">Isolates PEAQ's two internal layers: hard-constraint-only ignores trust
+                            score entirely; trust-score-only ignores hard constraints entirely; combined is the real
+                            production gate (peaq.engine.decide_peaq), unmodified.</p>
+                        <div class="table-responsive">
+                            <table class="comparison-table" id="ablation-table">
+                                <thead>
+                                    <tr>
+                                        <th>Strategy</th>
+                                        <th>Catch Rate</th>
+                                        <th>False-Rejection Rate</th>
+                                        <th>Bad Cases Blocked</th>
+                                    </tr>
+                                </thead>
+                                <tbody><!-- Rendered dynamically --></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Test Case Detail Drilldown -->
+                    <div class="card list-card">
+                        <div class="card-header">
+                            <i data-lucide="search-code"></i>
+                            <h2>Evaluation Case Detailed Breakdown (PEAQ config)</h2>
+                            <div class="filter-controls">
+                                <select id="bench-test-filter" class="custom-select select-inline">
+                                    <option value="all">All Cases</option>
+                                    <option value="benign">Benign Cases Only</option>
+                                    <option value="bad">Malicious/Policy-Violation Cases Only</option>
+                                    <option value="violations">Violations Slipped Through</option>
+                                    <option value="false_rejections">False Rejections Only</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="table-responsive select-table-box">
+                            <table class="detail-table" id="bench-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th>Case ID</th>
+                                        <th>Source</th>
+                                        <th>Domain</th>
+                                        <th>Ground Truth</th>
+                                        <th>Total Latency</th>
+                                        <th>Outcome</th>
+                                    </tr>
+                                </thead>
+                                <tbody><!-- Rendered dynamically --></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="bench-placeholder card" id="benchmarks-placeholder">
+                    <i data-lucide="play-circle" class="placeholder-icon"></i>
+                    <h3>No Benchmark Data Compiled</h3>
+                    <p>Select an agent and domain, then click "Run 4-Way Configuration Benchmark" above to evaluate
+                        against the real held-out test split.</p>
+                </div>
+            </section>
+
+            <!-- TAB 3: CONFIGURATION EDITOR -->
+            <section id="tab-config" class="tab-pane">
+                <div class="grid-layout cols-2">
+
+                    <!-- Gate Thresholds & Weights -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i data-lucide="key-round"></i>
+                            <h2>Decision Thresholds & Weights</h2>
+                        </div>
+
+                        <div class="config-section">
+                            <h3>PEAQ Approval Thresholds (theta_kappa)</h3>
+                            <p class="section-desc">Minimum required Trust Score for direct planning approval, per
+                                criticality tier. Calibrated (peaq.engine.calibrate_thresholds) against the highest
+                                score among literature-derived agent profiles &mdash; see the Config panel note below.</p>
+                            <div class="slider-group">
+                                <div class="slider-label-row">
+                                    <span>Low Criticality Threshold</span>
+                                    <span class="slider-val" id="val-thresh-low">0.46</span>
+                                </div>
+                                <input type="range" id="thresh-low" min="0.0" max="1.0" step="0.01" class="custom-slider">
+                            </div>
+                            <div class="slider-group">
+                                <div class="slider-label-row">
+                                    <span>Medium Criticality Threshold</span>
+                                    <span class="slider-val" id="val-thresh-medium">0.52</span>
+                                </div>
+                                <input type="range" id="thresh-medium" min="0.0" max="1.0" step="0.01" class="custom-slider">
+                            </div>
+                            <div class="slider-group">
+                                <div class="slider-label-row">
+                                    <span>High Criticality Threshold</span>
+                                    <span class="slider-val" id="val-thresh-high">0.61</span>
+                                </div>
+                                <input type="range" id="thresh-high" min="0.0" max="1.0" step="0.01" class="custom-slider">
+                            </div>
+                        </div>
+
+                        <div class="config-section">
+                            <h3>Criticality Weights</h3>
+                            <p class="section-desc">Importance weights of Competence / Policy Adherence / Adversarial
+                                Robustness by request criticality level (paper Table 1).</p>
+
+                            <div class="weight-matrix">
+                                <div class="weight-col-header">
+                                    <span>Level</span>
+                                    <span>Competence</span>
+                                    <span>Policy Adh.</span>
+                                    <span>Robustness</span>
+                                </div>
+
+                                <div class="weight-row">
+                                    <span class="w-level">Low</span>
+                                    <input type="number" id="w-low-comp" min="0" max="1" step="0.05" class="custom-input">
+                                    <input type="number" id="w-low-policy" min="0" max="1" step="0.05" class="custom-input">
+                                    <input type="number" id="w-low-rob" min="0" max="1" step="0.05" class="custom-input">
+                                </div>
+                                <div class="weight-row">
+                                    <span class="w-level">Medium</span>
+                                    <input type="number" id="w-med-comp" min="0" max="1" step="0.05" class="custom-input">
+                                    <input type="number" id="w-med-policy" min="0" max="1" step="0.05" class="custom-input">
+                                    <input type="number" id="w-med-rob" min="0" max="1" step="0.05" class="custom-input">
+                                </div>
+                                <div class="weight-row">
+                                    <span class="w-level">High</span>
+                                    <input type="number" id="w-high-comp" min="0" max="1" step="0.05" class="custom-input">
+                                    <input type="number" id="w-high-policy" min="0" max="1" step="0.05" class="custom-input">
+                                    <input type="number" id="w-high-rob" min="0" max="1" step="0.05" class="custom-input">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="save-config-btn" class="primary-btn">
+                            <i data-lucide="save"></i>
+                            <span>Save Parameters (this server session only)</span>
+                        </button>
+                    </div>
+
+                    <!-- Hard Constraints Reference -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i data-lucide="lock"></i>
+                            <h2>Configured Hard Constraints, All 5 Domains</h2>
+                        </div>
+
+                        <div class="constraints-reference" id="constraints-reference">
+                            <!-- Rendered dynamically per domain -->
+                        </div>
+
+                        <div class="info-alert card bg-dim">
+                            <i data-lucide="info" class="text-blue"></i>
+                            <div class="alert-desc">
+                                <strong>Safety Override Warning:</strong> Hard constraints represent corporate
+                                non-negotiable boundaries. H1-H3 failures immediately return <strong>REJECT</strong>;
+                                H4 (missing approval) routes to <strong>HUMAN_REVIEW</strong> instead &mdash; the agent
+                                isn't disqualified, the sign-off just hasn't happened yet. Both bypass trust-score
+                                calculation entirely.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
